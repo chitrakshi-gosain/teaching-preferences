@@ -364,7 +364,7 @@ function createSheetFooter(sheet: ExcelScript.Worksheet, schedule: Combinations,
 function main(workbook: ExcelScript.Workbook, course: 'COMP3900' | 'COMP9900', startRow: number = 31, endRow: number = 50, classTimesCol: string = 'A', classLocationsCol: string = 'B') {
   const timetable = workbook.getWorksheet('TT');
   if (!timetable) {
-    throw new Error('Timetable not found.');
+    throw new Error('Timetable not found');
   }
 
   if (startRow > endRow) {
