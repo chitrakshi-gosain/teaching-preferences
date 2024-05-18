@@ -1,3 +1,7 @@
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////// INTERFACES & ENUMS ////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 interface Combinations {
   [key: string]: {
     'in-person': number;
@@ -28,6 +32,10 @@ enum COLORS {
   WHITE = 'FFFFFF',
   BLACK = '000000',
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////// HELPER FUNCTIONS /////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Converts a 24-hour time string to a 12-hour format string
@@ -142,6 +150,36 @@ function setBlankRule(dataRange: ExcelScript.Range, color: string) {
 }
 
 /**
+ * Adds borders to the specified range in an Excel worksheet
+ * @param range The Excel range to add borders to
+ * @param insideHorizontal If true, adds inside horizontal borders
+ * @param insideVertical If true, adds inside vertical borders
+ * @param weight The weight of the border lines (thin or medium)
+ */
+function addBorders(range: ExcelScript.Range, insideHorizontal: Boolean, insideVertical: Boolean, weight: ExcelScript.BorderWeight) {
+  const borders = [
+    ExcelScript.BorderIndex.edgeLeft,
+    ExcelScript.BorderIndex.edgeRight,
+    ExcelScript.BorderIndex.edgeTop,
+    ExcelScript.BorderIndex.edgeBottom
+  ];
+
+  if (insideHorizontal) {
+    borders.push(ExcelScript.BorderIndex.insideHorizontal);
+  }
+
+  if (insideVertical) {
+    borders.push(ExcelScript.BorderIndex.insideVertical);
+  }
+
+  for (const border of borders) {
+    range.getFormat().getRangeBorder(border).setStyle(ExcelScript.BorderLineStyle.continuous);
+    range.getFormat().getRangeBorder(border).setColor(COLORS['BLACK']);
+    range.getFormat().getRangeBorder(border).setWeight(weight);
+  }
+}
+
+/**
  * Creates the left-most columns of the worksheet for tutor names and their zIDs
  * @param sheet The Excel worksheet to update
  */
@@ -160,6 +198,8 @@ function createLeftMostMostColumns(sheet: ExcelScript.Worksheet) {
   dataRange.getFormat().getFill().setColor(COLORS['SKY_BLUE']);
   dataRange.getFormat().getFont().setBold(true);
   dataRange.setValues(Array(30).fill(Array(2).fill('[fill in here]')));
+
+  addBorders(dataRange, true, true, ExcelScript.BorderWeight.thin);
 }
 
 /**
@@ -194,6 +234,8 @@ function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], type
 
   createLeftMostMostColumns(sheet);
 
+  addBorders(sheet.getRange(`C1:${endCol}34`), true, true, ExcelScript.BorderWeight.thin);
+
   return endColCharCode;
 }
 
@@ -203,10 +245,12 @@ function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], type
  * @param colCharCode The character code of the last column used
  */
 function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: number) {
+  let colCode = colCharCode;
+
   const titles = ['Done', 'Ideal # classes', 'Max # classes', 'Notes'];
   for (const title of titles) {
-    colCharCode += 1;
-    const col = String.fromCharCode(colCharCode);
+    colCode += 1;
+    const col = String.fromCharCode(colCode);
     let dataRange = sheet.getRange(`${col}1:${col}4`);
     dataRange.merge();
     dataRange.getFormat().getFont().setBold(true);
@@ -252,6 +296,9 @@ function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: numbe
       cellValConditionalFormat.setRule(zeroValRule);
     }
   }
+
+  addBorders(sheet.getRange(`${String.fromCharCode(colCharCode)}1:${String.fromCharCode(colCharCode + 3)}34`), true, false, ExcelScript.BorderWeight.thin);
+  addBorders(sheet.getRange(`${String.fromCharCode(colCharCode + 4)}1:${String.fromCharCode(colCharCode + 4)}34`), true, false, ExcelScript.BorderWeight.thin);
 }
 
 /**
@@ -288,7 +335,8 @@ function createTimetableRows(sheet: ExcelScript.Worksheet, teachingMode: string,
 
   dataRange = sheet.getRange(`B${currRow}:B${currRow + 1}`);
   dataRange.merge();
-  setValueAndColor(dataRange, teachingMode, COLORS['WHITE']);
+  dataRange.setValue(teachingMode);
+  alignCenterMiddle(dataRange);
 }
 
 /**
@@ -343,14 +391,14 @@ function createTimetable(sheet: ExcelScript.Worksheet, schedule: Combinations, c
     currRow += 2;
   }
 
-  let col = 67;
+  let col = 66;
   for (let i = 0; i < classes.length; i++) {
+    col++;
     if (types[i].toLocaleLowerCase() === 'in-person') {
       clearCellContents(sheet, String.fromCharCode(col), counts[i], teachingModeRows['in-person']);
     } else {
       clearCellContents(sheet, String.fromCharCode(col), counts[i], teachingModeRows['online']);
     }
-    col++;
   }
 }
 
@@ -403,13 +451,6 @@ function addInstructionRows(sheet: ExcelScript.Worksheet, classesLen: number) {
   sheet.getRange('1:1').insert(ExcelScript.InsertShiftDirection.down);
   sheet.getRange('1:1').insert(ExcelScript.InsertShiftDirection.down);
   sheet.getRange('1:1').insert(ExcelScript.InsertShiftDirection.down);
-  sheet.getRange('1:1').insert(ExcelScript.InsertShiftDirection.down);
-
-  const roles = {
-    'T': 'Tutor only (Teaching + 3 groups + marking)',
-    'L': 'Lab assist only (2 groups + marking)',
-    'TL': 'Either'
-  };
 
   const preferences = {
     '1': 'Preferred',
@@ -418,9 +459,7 @@ function addInstructionRows(sheet: ExcelScript.Worksheet, classesLen: number) {
 
   let col = 63 + classesLen / 2;
 
-  addInstructionBlock(sheet, 'What role can you do?', col, col + 3, COLORS['SKY_BLUE'], roles);
-
-  addInstructionBlock(sheet, 'Preference', col + 5, col + 7, COLORS['YELLOW'], preferences);
+  addInstructionBlock(sheet, 'Preference', col, col + 2, COLORS['YELLOW'], preferences);
 }
 
 /**
@@ -456,8 +495,23 @@ function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations) {
 
   createTimetable(sheet, schedule, classes, types, counts);
 
+  let col = 67;
+  for (let i = 0; i < classes.length; i++) {
+    const dataRange = sheet.getRange(`${String.fromCharCode(col)}1:${String.fromCharCode(col)}34`);
+    addBorders(dataRange, false, false, ExcelScript.BorderWeight.medium);
+    col++;
+  }
+
+  col = 67;
+  const dataRange = sheet.getRange(`${String.fromCharCode(col)}35:${String.fromCharCode(col + classes.length - 1)}35`);
+  addBorders(dataRange, false, true, ExcelScript.BorderWeight.medium);
+
   addInstructionRows(sheet, classes.length);
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////// MAIN FUNCTIONS //////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Main function to generate the class schedule worksheet
@@ -486,5 +540,5 @@ function main(workbook: ExcelScript.Workbook, course: 'COMP3900' | 'COMP9900', s
 
   const schedule = processClassSchedules(timetable, startRow, endRow, classTimesCol, classLocationsCol);
   updateWorksheet(worksheet, orderCombinations(schedule));
-  worksheet.getFreezePanes().freezeRows(9);
+  worksheet.getFreezePanes().freezeRows(8);
 }
