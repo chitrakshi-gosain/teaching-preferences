@@ -1,4 +1,10 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////// THIS SCRIPT IS FOR ////////////////////////////////////////
+///////////////////////// CLASSES WITH ONLY 1 KIND OF CASUAL ACADEMIC ROLE /////////////////////////
+//////////////////////////////////////// SUCH AS 3900 / 9900 ///////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////// INTERFACES & ENUMS ////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -184,6 +190,9 @@ function addBorders(range: ExcelScript.Range, insideHorizontal: Boolean, insideV
  * @param sheet The Excel worksheet to update
  */
 function createLeftMostMostColumns(sheet: ExcelScript.Worksheet) {
+  sheet.getRange('A:A').insert(ExcelScript.InsertShiftDirection.right);
+  sheet.getRange('A:A').insert(ExcelScript.InsertShiftDirection.right);
+
   let dataRange = sheet.getRange('A4:B4');
   dataRange.getFormat().getFill().setColor(COLORS['BLACK']);
   dataRange.getFormat().getFont().setColor(COLORS['WHITE']);
@@ -203,6 +212,24 @@ function createLeftMostMostColumns(sheet: ExcelScript.Worksheet) {
 }
 
 /**
+ * Convert a column index to its corresponding Excel column letter(s).
+ * @param colIndex The index of the column (1-based).
+ * @returns The Excel column letter.
+ */
+function getExcelColumn(colIndex: number): string {
+  let column = '';
+  let tempColIndex = colIndex;
+
+  while (tempColIndex > 0) {
+    const modulo = (tempColIndex - 1) % 26;
+    column = String.fromCharCode(65 + modulo) + column;
+    tempColIndex = Math.floor((tempColIndex - modulo) / 26);
+  }
+
+  return column;
+}
+
+/**
  * Records the class preferences in the worksheet
  * @param sheet The Excel worksheet to update
  * @param classes The array of class descriptions
@@ -211,7 +238,7 @@ function createLeftMostMostColumns(sheet: ExcelScript.Worksheet) {
  * @returns The character code of the last column used
  */
 function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], types: string[], counts: number[]) {
-  let endCol = String.fromCharCode(64 + classes.length);
+  let endCol = getExcelColumn(classes.length);
   let dataRange = sheet.getRange(`A1:${endCol}3`);
   dataRange.setValues([classes, types, counts]);
   dataRange.getFormat().getFont().setBold(true);
@@ -222,21 +249,15 @@ function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], type
 
   sheet.getRange(`A2:${endCol}2`).getFormat().getFill().setColor(COLORS['SILVER']);
 
-  sheet.getRange('A:A').insert(ExcelScript.InsertShiftDirection.right);
-  sheet.getRange('A:A').insert(ExcelScript.InsertShiftDirection.right);
-  let endColCharCode = 64 + classes.length + 2;
-  endCol = String.fromCharCode(endColCharCode);
-
-  dataRange = sheet.getRange(`C4:${endCol}4`);
+  dataRange = sheet.getRange(`A4:${endCol}4`);
   setValueAndColor(dataRange, 'Preference', COLORS['YELLOW']);
 
-  setBlankRule(sheet.getRange(`C5:${endCol}34`), COLORS['MISTY_ROSE']);
+  setBlankRule(sheet.getRange(`A5:${endCol}34`), COLORS['MISTY_ROSE']);
+  addBorders(sheet.getRange(`A1:${endCol}34`), true, true, ExcelScript.BorderWeight.thin);
 
   createLeftMostMostColumns(sheet);
 
-  addBorders(sheet.getRange(`C1:${endCol}34`), true, true, ExcelScript.BorderWeight.thin);
-
-  return endColCharCode;
+  return classes.length + 2;
 }
 
 /**
@@ -250,7 +271,7 @@ function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: numbe
   const titles = ['Done', 'Ideal # classes', 'Max # classes', 'Notes'];
   for (const title of titles) {
     colCode += 1;
-    const col = String.fromCharCode(colCode);
+    const col = getExcelColumn(colCode);
     let dataRange = sheet.getRange(`${col}1:${col}4`);
     dataRange.merge();
     dataRange.getFormat().getFont().setBold(true);
@@ -297,8 +318,8 @@ function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: numbe
     }
   }
 
-  addBorders(sheet.getRange(`${String.fromCharCode(colCharCode)}1:${String.fromCharCode(colCharCode + 3)}34`), true, false, ExcelScript.BorderWeight.thin);
-  addBorders(sheet.getRange(`${String.fromCharCode(colCharCode + 4)}1:${String.fromCharCode(colCharCode + 4)}34`), true, false, ExcelScript.BorderWeight.thin);
+  addBorders(sheet.getRange(`${getExcelColumn(colCharCode)}1:${getExcelColumn(colCharCode + 3)}34`), true, false, ExcelScript.BorderWeight.thin);
+  addBorders(sheet.getRange(`${getExcelColumn(colCharCode + 4)}1:${getExcelColumn(colCharCode + 4)}34`), true, false, ExcelScript.BorderWeight.thin);
 }
 
 /**
@@ -363,7 +384,7 @@ function createTimetable(sheet: ExcelScript.Worksheet, schedule: Combinations, c
   const [maxInPerson, maxOnline] = maxValues(schedule);
 
   let currRow = 35;
-  const endCol = String.fromCharCode(64 + classes.length + 2);
+  const endCol = getExcelColumn(classes.length + 2);
   const dataRange = sheet.getRange(`C${currRow}:${endCol}${currRow}`);
   dataRange.setValues([classes]);
   dataRange.getFormat().getFill().setColor(COLORS['THISTLE']);
@@ -391,13 +412,13 @@ function createTimetable(sheet: ExcelScript.Worksheet, schedule: Combinations, c
     currRow += 2;
   }
 
-  let col = 66;
+  let col = 2;
   for (let i = 0; i < classes.length; i++) {
     col++;
     if (types[i].toLocaleLowerCase() === 'in-person') {
-      clearCellContents(sheet, String.fromCharCode(col), counts[i], teachingModeRows['in-person']);
+      clearCellContents(sheet, getExcelColumn(col), counts[i], teachingModeRows['in-person']);
     } else {
-      clearCellContents(sheet, String.fromCharCode(col), counts[i], teachingModeRows['online']);
+      clearCellContents(sheet, getExcelColumn(col), counts[i], teachingModeRows['online']);
     }
   }
 }
@@ -425,17 +446,17 @@ function setValueAndColor(range: ExcelScript.Range, val: string, color: string) 
  */
 function addInstructionBlock(sheet: ExcelScript.Worksheet, header: string, startCol: number, endCol: number, color: string, obj: Object, ) {
   let row = 1;
-  let dataRange = sheet.getRange(`${String.fromCharCode(startCol)}${row}:${String.fromCharCode(endCol)}${row}`);
+  let dataRange = sheet.getRange(`${getExcelColumn(startCol)}${row}:${getExcelColumn(endCol)}${row}`);
   dataRange.merge();
   dataRange.getFormat().getFont().setBold(true);
   setValueAndColor(dataRange, header, color);
 
   for (const [key, value] of Object.entries(obj)) {
     row += 1;
-    dataRange = sheet.getRange(`${String.fromCharCode(startCol)}${row}:${String.fromCharCode(startCol)}${row}`);
+    dataRange = sheet.getRange(`${getExcelColumn(startCol)}${row}:${getExcelColumn(startCol)}${row}`);
     setValueAndColor(dataRange, key, color);
 
-    dataRange = sheet.getRange(`${String.fromCharCode(startCol + 1)}${row}:${String.fromCharCode(endCol)}${row}`);
+    dataRange = sheet.getRange(`${getExcelColumn(startCol + 1)}${row}:${getExcelColumn(endCol)}${row}`);
     dataRange.merge();
     setValueAndColor(dataRange, value, color);
   }
@@ -457,7 +478,7 @@ function addInstructionRows(sheet: ExcelScript.Worksheet, classesLen: number) {
     '2': 'Possible'
   }
 
-  let col = 63 + classesLen / 2;
+  let col = classesLen / 2;
 
   addInstructionBlock(sheet, 'Preference', col, col + 2, COLORS['YELLOW'], preferences);
 }
@@ -495,15 +516,15 @@ function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations) {
 
   createTimetable(sheet, schedule, classes, types, counts);
 
-  let col = 67;
+  let col = 3;
   for (let i = 0; i < classes.length; i++) {
-    const dataRange = sheet.getRange(`${String.fromCharCode(col)}1:${String.fromCharCode(col)}34`);
+    const dataRange = sheet.getRange(`${getExcelColumn(col)}1:${getExcelColumn(col)}34`);
     addBorders(dataRange, false, false, ExcelScript.BorderWeight.medium);
     col++;
   }
 
-  col = 67;
-  const dataRange = sheet.getRange(`${String.fromCharCode(col)}35:${String.fromCharCode(col + classes.length - 1)}35`);
+  col = 3;
+  const dataRange = sheet.getRange(`${getExcelColumn(col)}35:${getExcelColumn(col + classes.length - 1)}35`);
   addBorders(dataRange, false, true, ExcelScript.BorderWeight.medium);
 
   addInstructionRows(sheet, classes.length);
