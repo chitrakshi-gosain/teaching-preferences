@@ -286,6 +286,7 @@ function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], type
  * Creates the right-most columns of the worksheet for additional class details
  * @param sheet The Excel worksheet to update
  * @param colCharCode The character code of the last column used
+ * @param helpSessions true if the course has help sessions
  */
 function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: number, helpSessions: boolean) {
   let colCode = colCharCode;
@@ -534,6 +535,7 @@ function addInstructionRows(sheet: ExcelScript.Worksheet, classesLen: number) {
  * Updates the worksheet with class schedule data and formatting
  * @param sheet The Excel worksheet to update
  * @param schedule The class schedule combinations
+ * @param helpSessions true if the course has help sessions
  * @returns The range that was updated
  */
 function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations, helpSessions: boolean) {
