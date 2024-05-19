@@ -287,10 +287,12 @@ function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], type
  * @param sheet The Excel worksheet to update
  * @param colCharCode The character code of the last column used
  */
-function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: number) {
+function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: number, helpSessions: boolean) {
   let colCode = colCharCode;
 
-  const titles = ['Done', 'Ideal # classes', 'Max # classes', 'Notes'];
+  const titles = helpSessions
+    ? ['Done', 'I want to do help sessions!', 'Ideal # classes', 'Max # classes', 'Notes']
+    : ['Done', 'Ideal # classes', 'Max # classes', 'Notes'];
   for (const title of titles) {
     colCode += 1;
     const col = getExcelColumn(colCode);
@@ -298,6 +300,7 @@ function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: numbe
     dataRange.merge();
     dataRange.getFormat().getFont().setBold(true);
     dataRange.getFormat().setColumnWidth(85);
+    dataRange.getFormat().setWrapText(true);
     setValueAndColor(dataRange, title, COLORS['LEMON']);
 
     dataRange = sheet.getRange(`${col}5:${col}34`);
@@ -340,8 +343,9 @@ function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: numbe
     }
   }
 
-  addBorders(sheet.getRange(`${getExcelColumn(colCharCode)}1:${getExcelColumn(colCharCode + 3)}34`), true, false, ExcelScript.BorderWeight.thin);
-  addBorders(sheet.getRange(`${getExcelColumn(colCharCode + 4)}1:${getExcelColumn(colCharCode + 4)}34`), true, false, ExcelScript.BorderWeight.thin);
+  const endCol = helpSessions ? colCharCode + 4 : colCharCode + 3;
+  addBorders(sheet.getRange(`${getExcelColumn(colCharCode)}1:${getExcelColumn(endCol)}34`), true, false, ExcelScript.BorderWeight.thin);
+  addBorders(sheet.getRange(`${getExcelColumn(endCol + 1)}1:${getExcelColumn(endCol + 1)}34`), true, false, ExcelScript.BorderWeight.thin);
 }
 
 /**
@@ -532,7 +536,7 @@ function addInstructionRows(sheet: ExcelScript.Worksheet, classesLen: number) {
  * @param schedule The class schedule combinations
  * @returns The range that was updated
  */
-function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations) {
+function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations, helpSessions: boolean) {
   const classes: string[] = [];
   const types: string[] = [];
   const counts: number[] = [];
@@ -556,7 +560,7 @@ function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations) {
   }
 
   const endCol = recordPreferences(sheet, classes, types, counts);
-  createRightMostColumns(sheet, endCol);
+  createRightMostColumns(sheet, endCol, helpSessions);
   createTimetable(sheet, schedule, classes, types, counts);
 
   let col = 1;
@@ -579,13 +583,14 @@ function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations) {
 /**
  * Main function to generate the class schedule worksheet
  * @param workbook The Excel workbook object
- * @param course The course code (either 'COMP3900' or 'COMP9900')
+ * @param course The course code
  * @param startRow The starting row of the timetable data
  * @param endRow The ending row of the timetable data
  * @param classTimesCol The column containing class times
  * @param classLocationsCol The column containing class locations
+ * @param helpSessions Select 'Yes' if the course has help sessions else 'No'
  */
-function main(workbook: ExcelScript.Workbook, course: string = 'COMP1531', startRow: number = 31, endRow: number = 50, classTimesCol: string = 'A', classLocationsCol: string = 'B') {
+function main(workbook: ExcelScript.Workbook, course: string, startRow: number, endRow: number, classTimesCol: string, classLocationsCol: string, helpSessions: 'Yes' | 'No') {
   const timetable = workbook.getWorksheet('TT');
   if (!timetable) {
     throw new Error('Timetable not found');
@@ -602,6 +607,6 @@ function main(workbook: ExcelScript.Workbook, course: string = 'COMP1531', start
   const worksheet = workbook.addWorksheet(course);
 
   const schedule = processClassSchedules(timetable, startRow, endRow, classTimesCol, classLocationsCol);
-  updateWorksheet(worksheet, orderCombinations(schedule));
+  updateWorksheet(worksheet, orderCombinations(schedule), helpSessions == 'Yes' ? true : false);
   worksheet.getFreezePanes().freezeRows(9);
 }
