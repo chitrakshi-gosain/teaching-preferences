@@ -26,26 +26,20 @@ class TimetableScraper:
         for cell in form_body_cells:
             inner_cell = cell.find_all('td', class_='formBody', colspan='6')
             if len(inner_cell) == 1 and cell.find('td', class_='data', string='Laboratory'):
-                class_info = self._extract_class_info(cell, inner_cell[0])
-                current_term = class_info.get('Term', '').split()[0]
+                class_details = self._extract_class_details(inner_cell[0])
+                current_term = cell.find('table').find_all('tr')[1].find_all('td', class_='data')[2].text.split()[0]
                 if current_term == self.term:
-                    class_info['Term'] = current_term
-                    classes.append(class_info)
+                    classes.append(class_details)
 
         return pd.DataFrame(classes)
 
-    def _extract_class_info(self, cell, inner_cell):
+    def _extract_class_details(self, inner_cell):
         """
         Extract class information from a table cell
         """
-        class_info = cell.find('table').find_all('tr')[1].find_all('td', class_='data')
         class_details = inner_cell.find('table').find_all('tr')[2].find_all('td', class_='data')[0:3]
         return {
-            'Class Number': class_info[0].text,
-            'Class Code': class_info[1].text,
-            'Term': class_info[2].text,
-            'Day': class_details[0].text,
-            'Time': class_details[1].text,
+            'Day/Time': f'{class_details[0].text} {class_details[1].text}',
             'Location': class_details[2].text,
         }
 
@@ -56,8 +50,8 @@ class TimetableScraper:
         df.to_csv(filename, index=False)
 
 if __name__ == "__main__":
-    course_code = input("Enter the course code: ")
-    term = input("Enter the term: ")
+    course_code = input('Enter the course code: ')
+    term = input('Enter the term: ')
     scraper = TimetableScraper(course_code, term)
     timetable_data = scraper.fetch_timetable()
     if not timetable_data.empty:
