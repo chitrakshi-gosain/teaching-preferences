@@ -8,6 +8,9 @@
 //////////////////////////////////////// INTERFACES & ENUMS ////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * Interface for storing class schedule combinations
+ */
 interface Combinations {
   [key: string]: {
     'in-person': number;
@@ -15,11 +18,17 @@ interface Combinations {
   }
 }
 
+/**
+ * Interface for storing rows corresponding to different teaching modes
+ */
 interface TeachingModeRows {
   'in-person': number[];
   'online': number[];
 }
 
+/**
+ * Enum for color constants used in the Excel sheet
+ */
 enum COLORS {
   SKY_BLUE = 'C9DAF8',
   CYAN = 'B5E3E8',
@@ -264,7 +273,7 @@ function recordPreferences(sheet: ExcelScript.Worksheet, classes: string[], type
  * Creates the right-most columns of the worksheet for additional class details
  * @param sheet The Excel worksheet to update
  * @param colCharCode The character code of the last column used
- * @param helpSessions true if the course has help sessions
+ * @param helpSessions Whether to include help sessions
  */
 function createRightMostColumns(sheet: ExcelScript.Worksheet, colCharCode: number, helpSessions: boolean) {
   let colCode = colCharCode;
@@ -346,10 +355,22 @@ function maxValues(schedule: Combinations): [number, number] {
  * @param teachingMode The teaching mode ('In-person' or 'Online')
  * @param currRow The current row in the worksheet
  * @param endCol The ending column for the range
+ * @param twoTutors Whether the class has two tutors
  */
-function createTimetableRows(sheet: ExcelScript.Worksheet, teachingMode: string, currRow: number, endCol: string) {
-  let dataRange = sheet.getRange(`C${currRow}:${endCol}${currRow + 1}`);
-  setValueAndColor(dataRange, '-', COLORS['SALMON']);
+function createTimetableRows(sheet: ExcelScript.Worksheet, teachingMode: string, currRow: number, endCol: number, twoTutors: boolean) {
+  const col = getExcelColumn(endCol);
+  let dataRange = sheet.getRange(`C${currRow}:${col}${currRow + 1}`);
+
+  if (twoTutors) {
+    setValueAndColor(dataRange, '-', COLORS['SALMON']);
+  } else {
+    for (let i = 3; i <= endCol; i++) {
+      const curr_col = getExcelColumn(i);
+      const range = sheet.getRange(`${curr_col}${currRow}:${curr_col}${currRow + 1}`);
+      range.merge();
+      setValueAndColor(range, '-', COLORS['SALMON'])
+    }
+  }
 
   const emptyCell = dataRange.addConditionalFormat(ExcelScript.ConditionalFormatType.custom).getCustom();
   emptyCell.getFormat().getFill().setColor(COLORS['RED']);
@@ -369,9 +390,11 @@ function createTimetableRows(sheet: ExcelScript.Worksheet, teachingMode: string,
  * Clears the contents of the specified cell range
  * @param sheet The Excel worksheet to update
  * @param cellRange The range of cells to clear
+ * @param teachingModeCount The number of classes in the given teaching mode
+ * @param rows The rows to clear
  */
 function clearCellContents(sheet: ExcelScript.Worksheet, col: string, teachingModeCount: number, rows: number[]) {
-  for (let i = 0; i != teachingModeCount; i++) {
+  for (let i = 0; i < teachingModeCount; i++) {
     const dataRange = sheet.getRange(`${col}${rows[i]}:${col}${rows[i] + 1}`);
     dataRange.setValue('');
   }
@@ -380,17 +403,19 @@ function clearCellContents(sheet: ExcelScript.Worksheet, col: string, teachingMo
 /**
  * Creates a timetable in the specified worksheet
  * @param sheet The Excel worksheet to update
- * @param startRow The starting row of the timetable
- * @param endRow The ending row of the timetable
- * @param columns The columns to use for the timetable
- * @param title The title of the timetable
+ * @param schedule The class schedule combinations
+ * @param classes The array of class descriptions
+ * @param types The array of class types (e.g., 'In-person' or 'Online')
+ * @param counts The array of class counts
+ * @param twoTutors Whether the class has two tutors
  */
-function createTimetable(sheet: ExcelScript.Worksheet, schedule: Combinations, classes: string[], types: string[], counts: number[]) {
+function createTimetable(sheet: ExcelScript.Worksheet, schedule: Combinations, classes: string[], types: string[], counts: number[], twoTutors: boolean) {
   const [maxInPerson, maxOnline] = maxValues(schedule);
 
   let currRow = 35;
-  const endCol = getExcelColumn(classes.length + 2);
-  const dataRange = sheet.getRange(`C${currRow}:${endCol}${currRow}`);
+  const endCol = classes.length + 2;
+  const endColStr = getExcelColumn(endCol);
+  const dataRange = sheet.getRange(`C${currRow}:${endColStr}${currRow}`);
   dataRange.setValues([classes]);
   dataRange.getFormat().getFill().setColor(COLORS['THISTLE']);
   dataRange.getFormat().getFont().setBold(true);
@@ -407,13 +432,13 @@ function createTimetable(sheet: ExcelScript.Worksheet, schedule: Combinations, c
 
   for (let i = 0; i < maxInPerson; i++) {
     teachingModeRows['in-person'].push(currRow);
-    createTimetableRows(sheet, 'In-person', currRow, endCol);
+    createTimetableRows(sheet, 'In-person', currRow, endCol, twoTutors);
     currRow += 2;
   }
 
   for (let i = 0; i < maxOnline; i++) {
     teachingModeRows['online'].push(currRow);
-    createTimetableRows(sheet, 'Online', currRow, endCol);
+    createTimetableRows(sheet, 'Online', currRow, endCol, twoTutors);
     currRow += 2;
   }
 
@@ -492,10 +517,11 @@ function addInstructionRows(sheet: ExcelScript.Worksheet, classesLen: number) {
  * Updates the worksheet with class schedule data and formatting
  * @param sheet The Excel worksheet to update
  * @param schedule The class schedule combinations
- * @param helpSessions true if the course has help sessions
+ * @param helpSessions Whether to include help sessions
+ * @param twoTutors Whether the class has two tutors
  * @returns The range that was updated
  */
-function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations, helpSessions: boolean) {
+function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations, helpSessions: boolean, twoTutors: boolean) {
   const classes: string[] = [];
   const types: string[] = [];
   const counts: number[] = [];
@@ -520,7 +546,7 @@ function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations, h
 
   createRightMostColumns(sheet, recordPreferences(sheet, classes, types, counts), helpSessions);
 
-  createTimetable(sheet, schedule, classes, types, counts);
+  createTimetable(sheet, schedule, classes, types, counts, twoTutors);
 
   let col = 3;
   for (let i = 0; i < classes.length; i++) {
@@ -549,8 +575,9 @@ function updateWorksheet(sheet: ExcelScript.Worksheet, schedule: Combinations, h
  * @param classTimesCol The column containing class times
  * @param classLocationsCol The column containing class locations
  * @param helpSessions Select 'Yes' if the course has help sessions else 'No'
+ * @param twoTutors Select 'Yes' if the course has two tutors per class else 'No'
  */
-function main(workbook: ExcelScript.Workbook, course: 'COMP3900' | 'COMP9900', startRow: number, endRow: number, classTimesCol: string, classLocationsCol: string, helpSessions: 'Yes' | 'No') {
+function main(workbook: ExcelScript.Workbook, course: 'COMP3900' | 'COMP9900', startRow: number, endRow: number, classTimesCol: string, classLocationsCol: string, helpSessions: 'Yes' | 'No', twoTutors: 'Yes' | 'No') {
   const timetable = workbook.getWorksheet('TT');
   if (!timetable) {
     throw new Error('Timetable not found');
@@ -567,6 +594,6 @@ function main(workbook: ExcelScript.Workbook, course: 'COMP3900' | 'COMP9900', s
   const worksheet = workbook.addWorksheet(course);
 
   const schedule = processClassSchedules(timetable, startRow, endRow, classTimesCol, classLocationsCol);
-  updateWorksheet(worksheet, orderCombinations(schedule), helpSessions == 'Yes' ? true : false);
+  updateWorksheet(worksheet, orderCombinations(schedule), helpSessions == 'Yes' ? true : false, twoTutors == 'Yes' ? true : false);
   worksheet.getFreezePanes().freezeRows(8);
 }
