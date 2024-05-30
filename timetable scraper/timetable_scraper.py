@@ -1,4 +1,5 @@
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 import pandas as pd
@@ -11,12 +12,13 @@ logger = logging.getLogger(__name__)
 
 class TimetableScraper:
     def __init__(self):
-        self.session = requests.Session()
+        self.session = None
         self.df = pd.DataFrame()
         self.course_code = ''
         self.term = ''
         self.year = 0
         self.campus = ''
+        self.classes = {}
         self.campuses = {
             "Kensington": 'KENS',
             "Paddington": 'COFA',
@@ -24,17 +26,29 @@ class TimetableScraper:
             "Canberra ADFA": 'ADFA',
         }
 
-    def fetch_html(self, url: str):
-        response = self.session.get(url)
-        response.raise_for_status()
-        return BeautifulSoup(response.content, 'html.parser')
+    async def fetch_html(self, url: str):
+        if self.session:
+            async with self.session.get(url) as response:
+                response.raise_for_status()
+                content = await response.text()
+                return BeautifulSoup(content, 'html.parser')
 
-    def fetch_timetable(self):
+    async def fetch_timetable(self):
         """
         Fetch timetable data for the given course code and term
         """
         logger.info("Fetching timetable data")
-        html_soup = self.fetch_html(f'https://timetable.unsw.edu.au/{self.year}/{self.course_code}.html')
+        try:
+            html_soup = await self.fetch_html(f'https://timetable.unsw.edu.au/{self.year}/{self.course_code}.html')
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {e}")
+            return self.df
+        except Exception as e:
+            logger.error(f"Error fetching timetable: {e}")
+            return self.df
+        
+        if not html_soup:
+            return False
 
         form_body_cells = html_soup.find_all('td', class_='formBody')
         if not form_body_cells:
@@ -45,27 +59,40 @@ class TimetableScraper:
         for cell in form_body_cells:
             inner_cell = cell.find_all('td', class_='formBody', colspan='6')
             if len(inner_cell) == 1 and cell.find('td', class_='data', string='Laboratory'):
-                class_details, class_term = self._extract_class_details(cell, inner_cell[0]).values()
+                try:
+                    class_details, class_term = self._extract_class_details(cell, inner_cell[0]).values()
+                except Exception as e:
+                    logger.error(f"Error parsing class details: {e}")
+                    continue
+
                 if class_term == self.term:
                     classes.append(class_details)
 
         self.df = pd.DataFrame(classes)
 
+        # logger.info(self.classes) # useful for setups etc
+
     def _extract_class_details(self, cell, inner_cell):
         """
         Extract class information from a table cell
         """
-        class_info = cell.find('table').find_all('tr')[1].find_all('td', class_='data')
+        rows = cell.find('table').find_all('tr')
+        class_info = rows[1].find_all('td', class_='data')
+        class_data = rows[3].find_all('td', class_='data')
         class_details = inner_cell.find('table').find_all('tr')[2].find_all('td', class_='data')[0:3]
+
+        self.classes[class_info[0].text.strip()] = class_info[1].text.strip()
+
         return {
             'class_details': {
-                'Class': class_info[0].text,
-                'Section': class_info[1].text,
-                'Enrols/Capacity': cell.find('table').find_all('tr')[3].find_all('td', class_='data')[2].text,
-                'Day/Time': f'{class_details[0].text} {class_details[1].text}',
-                'Location': class_details[2].text,
+                'Class': class_info[0].text.strip(),
+                'Section': class_info[1].text.strip(),
+                'Status': class_data[1].text.strip(),
+                'Enrols/Capacity': class_data[2].text.strip(),
+                'Day/Time': f'{class_details[0].text.strip()} {class_details[1].text.strip()}',
+                'Location': class_details[2].text.strip(),
             },
-            'class_term': class_info[2].text.split()[0]
+            'class_term': class_info[2].text.split()[0].strip()
         }
 
     def save_timetable_to_csv(self, filename='unsw_timetable.csv'):
@@ -75,9 +102,19 @@ class TimetableScraper:
         self.df.to_csv(filename, index=False)
         logger.info(f"Timetable data saved to {filename}")
 
-    def check_subject_existence(self, subject):
+    async def check_subject_existence(self, subject):
         logger.info("Checking if subject exists")
-        html_soup = self.fetch_html('https://timetable.unsw.edu.au/2024/subjectSearch.html')
+        try:
+            html_soup = await self.fetch_html('https://timetable.unsw.edu.au/2024/subjectSearch.html')
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error fetching subject list: {e}")
+            return False
+
+        if not html_soup:
+            return False
 
         ahrefs = html_soup.find('a', attrs={'name': self.campuses[self.campus]})
         if ahrefs:
@@ -87,9 +124,19 @@ class TimetableScraper:
                 return subject in subjects
         return False
 
-    def check_course_existence(self):
+    async def check_course_existence(self):
         logger.info("Checking if course exists")
-        html_soup = self.fetch_html(f'https://timetable.unsw.edu.au/2024/{self.course_code[0:4]}{self.campuses[self.campus]}.html')
+        try:
+            html_soup = await self.fetch_html(f'https://timetable.unsw.edu.au/2024/{self.course_code[0:4]}{self.campuses[self.campus]}.html')
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error fetching course list: {e}")
+            return False
+        
+        if not html_soup:
+            return False
 
         classes = []
         categories = html_soup.find_all('td', class_='classSearchSectionHeading')
@@ -104,7 +151,7 @@ class TimetableScraper:
             raise argparse.ArgumentTypeError("Course code should have first four letters capital followed by 4 digits")
         return course_code
 
-    def main(self):
+    async def main(self):
         """
         Set up a database by injecting schema, listing tables, injecting dummy data, and providing details about a specific table
         """
@@ -120,16 +167,18 @@ class TimetableScraper:
         self.year = namespace.year
         self.campus = namespace.campus
 
-        if not self.check_subject_existence(self.course_code[0:4]):
-            raise argparse.ArgumentTypeError(f"Subject {self.course_code[0:4]} is not offered at {self.campus} campus")
+        async with aiohttp.ClientSession() as session:
+            self.session = session
+            if not await self.check_subject_existence(self.course_code[0:4]):
+                raise argparse.ArgumentTypeError(f"Subject {self.course_code[0:4]} is not offered at {self.campus} campus")
 
-        if not self.check_course_existence():
-            raise argparse.ArgumentTypeError(f"Course {self.course_code} does not exist at {self.campus} campus")
+            if not await self.check_course_existence():
+                raise argparse.ArgumentTypeError(f"Course {self.course_code} does not exist at {self.campus} campus")
 
-        self.fetch_timetable()
-        if not self.df.empty:
-            self.save_timetable_to_csv()
+            await self.fetch_timetable()
+            if not self.df.empty:
+                self.save_timetable_to_csv()
 
 if __name__ == "__main__":
     scraper = TimetableScraper()
-    scraper.main()
+    asyncio.run(scraper.main())
